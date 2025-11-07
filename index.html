@@ -13,11 +13,9 @@
     <link href="https://fonts.googleapis.com/css2?family=Lexend:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
     <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined" rel="stylesheet"/>
  
-    <!-- Plotly.js for charts (still needed) -->
-    <script src="https://cdn.plot.ly/plotly-2.33.0.min.js" defer onerror="handleScriptError(this)"></script>
-
-    <!-- PapaParse for CSV parsing (local file) -->
-    <script src="papaparse.min.js" defer onerror="handleScriptError(this)"></script>
+    <!-- Load dependencies -->
+    <script src="papaparse.min.js"></script>
+    <script src="https://cdn.plot.ly/plotly-2.33.0.min.js"></script>
     <script>
         tailwind.config = {
             darkMode: "class",
@@ -200,6 +198,12 @@
                             <div id="body-part-strength-graph" class="w-full h-[450px] rounded-lg"></div>
                         </div>
 
+                        <!-- Weekly Total Volume -->
+                        <h3 class="text-white text-xl font-bold leading-tight tracking-[-0.015em] pb-2 pt-6">Weekly Total Volume</h3>
+                        <div class="rounded-xl bg-white/5 p-4 border border-white/10">
+                            <div id="weekly-volume-graph" class="w-full h-[300px] rounded-lg"></div>
+                        </div>
+
                         <!-- Body Part Balance (Sets) -->
                         <h3 class="text-white text-xl font-bold leading-tight tracking-[-0.015em] pb-2 pt-6">Body Part Balance (by Total Sets)</h3>
                         <div class="max-w-md mx-auto mb-4">
@@ -225,6 +229,33 @@
                             </select>
                         </div>
 
+                        <!-- Stats Cards -->
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                            <!-- Personal Best Card -->
+                            <div class="flex flex-col items-stretch justify-start rounded-xl bg-white/5 overflow-hidden">
+                                <div class="flex w-full grow flex-col items-stretch justify-center gap-1 p-6">
+                                    <p class="text-[#92c9a4] text-sm font-normal leading-normal">Personal Best</p>
+                                    <div class="flex items-baseline gap-2">
+                                        <p id="exercise-pb-volume" class="text-white text-4xl font-bold leading-tight tracking-[-0.015em] text-primary">--</p>
+                                        <p class="text-white/60 text-base">kg in one set</p>
+                                    </div>
+                                    <p id="exercise-pb-details" class="text-[#92c9a4] text-base font-normal leading-normal mt-2">--</p>
+                                </div>
+                            </div>
+
+                            <!-- Latest Set Card -->
+                            <div class="flex flex-col items-stretch justify-start rounded-xl bg-white/5 overflow-hidden">
+                                <div class="flex w-full grow flex-col items-stretch justify-center gap-1 p-6">
+                                    <p class="text-[#92c9a4] text-sm font-normal leading-normal">Latest Set</p>
+                                    <div class="flex items-baseline gap-2">
+                                        <p id="exercise-latest-volume" class="text-white text-4xl font-bold leading-tight tracking-[-0.015em] text-primary">--</p>
+                                        <p class="text-white/60 text-base">kg in one set</p>
+                                    </div>
+                                    <p id="exercise-latest-details" class="text-[#92c9a4] text-base font-normal leading-normal mt-2">--</p>
+                                </div>
+                            </div>
+                        </div>
+
                         <!-- Charts Section -->
                         <section class="flex flex-col gap-4 rounded-xl bg-[#193322]/50 p-4">
                             <!-- Volume Chart -->
@@ -237,6 +268,28 @@
                             <h2 class="text-white text-base font-medium leading-normal mt-6">Estimated 1RM (kg)</h2>
                             <div class="flex min-h-[200px] flex-1 flex-col">
                                 <div id="exercise-1rm-graph" class="w-full h-full rounded-lg"></div>
+                            </div>
+                        </section>
+
+                        <!-- Raw Data Table -->
+                        <section class="mt-8">
+                            <h2 class="text-white text-base font-medium leading-normal mb-4">Exercise Details</h2>
+                            <div class="overflow-x-auto rounded-lg border border-white/10">
+                                <table class="w-full text-sm text-left text-white/70">
+                                    <thead class="text-xs uppercase bg-white/5">
+                                        <tr>
+                                            <th class="px-4 py-3">Date</th>
+                                            <th class="px-4 py-3">Sets</th>
+                                            <th class="px-4 py-3">Reps</th>
+                                            <th class="px-4 py-3">Weight (kg)</th>
+                                            <th class="px-4 py-3">Volume (kg)</th>
+                                            <th class="px-4 py-3">Est. 1RM (kg)</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="exercise-raw-data" class="divide-y divide-white/10">
+                                        <!-- Data will be populated by JavaScript -->
+                                    </tbody>
+                                </table>
                             </div>
                         </section>
                     </div>
@@ -651,6 +704,7 @@
             drawWorkoutCalendarHeatmap();
             drawWorkoutConsistencyChart();
             drawBodyPartChart();
+            drawWeeklyVolumeChart();
             // Wire up body part balance filter and initial draw
             const balanceFilter = document.getElementById('balance-time-filter');
             if (balanceFilter) {
@@ -822,6 +876,41 @@
         function drawExerciseCharts(selectedExercise) {
             if (!selectedExercise) return;
            
+            // Get all raw sets for this exercise
+            const rawSets = processedData.validSets.filter(set => set.exercise === selectedExercise)
+                .sort((a, b) => b.date - a.date); // Sort by date, newest first
+
+            // Calculate personal best (highest single-set volume)
+            const personalBest = rawSets.reduce((best, set) => {
+                const setVolume = set.reps * set.weight;
+                if (setVolume > best.volume) {
+                    return {
+                        volume: setVolume,
+                        reps: set.reps,
+                        weight: set.weight,
+                        date: set.date
+                    };
+                }
+                return best;
+            }, { volume: 0, reps: 0, weight: 0, date: null });
+
+            // Get latest set
+            const latestSet = rawSets[0] || { reps: 0, weight: 0, date: null };
+            const latestVolume = latestSet.reps * latestSet.weight;
+
+            // Update personal best display
+            document.getElementById('exercise-pb-volume').textContent = 
+                personalBest.volume.toLocaleString('en-US', { maximumFractionDigits: 1 });
+            document.getElementById('exercise-pb-details').textContent = 
+                personalBest.date ? `${personalBest.reps} reps × ${personalBest.weight}kg on ${personalBest.date.toLocaleDateString()}` : '--';
+
+            // Update latest set display
+            document.getElementById('exercise-latest-volume').textContent = 
+                latestVolume.toLocaleString('en-US', { maximumFractionDigits: 1 });
+            document.getElementById('exercise-latest-details').textContent = 
+                latestSet.date ? `${latestSet.reps} reps × ${latestSet.weight}kg on ${latestSet.date.toLocaleDateString()}` : '--';
+
+            // Group sets by week for the charts
             const data = processedData.strengthByExercise.filter(d => d.Übung === selectedExercise);
 
             // Volume Chart
@@ -869,9 +958,175 @@
                 yaxis: { title: '1RM (kg)' }
             });
             Plotly.newPlot('exercise-1rm-graph', [rmTrace], rmLayout, {responsive: true});
+
+            // Update raw data table
+            const tableBody = document.getElementById('exercise-raw-data');
+            if (tableBody) {
+                // Group sets by date
+                const setsByDate = {};
+                rawSets.forEach(set => {
+                    const dateKey = set.date.toISOString().split('T')[0];
+                    if (!setsByDate[dateKey]) {
+                        setsByDate[dateKey] = {
+                            date: set.date,
+                            sets: 0,
+                            totalReps: 0,
+                            totalVolume: 0,
+                            maxWeight: 0,
+                            max1RM: 0
+                        };
+                    }
+                    setsByDate[dateKey].sets++;
+                    setsByDate[dateKey].totalReps += set.reps;
+                    setsByDate[dateKey].totalVolume += set.volume;
+                    setsByDate[dateKey].maxWeight = Math.max(setsByDate[dateKey].maxWeight, set.weight);
+                    setsByDate[dateKey].max1RM = Math.max(setsByDate[dateKey].max1RM, set.e1RM);
+                });
+
+                // Convert to array and sort by date
+                const dailyData = Object.values(setsByDate)
+                    .sort((a, b) => b.date - a.date); // newest first
+
+                // Build table HTML
+                tableBody.innerHTML = dailyData.map(day => `
+                    <tr class="hover:bg-white/5">
+                        <td class="px-4 py-3">${day.date.toLocaleDateString()}</td>
+                        <td class="px-4 py-3">${day.sets}</td>
+                        <td class="px-4 py-3">${day.totalReps}</td>
+                        <td class="px-4 py-3">${day.maxWeight.toFixed(1)}</td>
+                        <td class="px-4 py-3">${day.totalVolume.toFixed(1)}</td>
+                        <td class="px-4 py-3">${day.max1RM.toFixed(1)}</td>
+                    </tr>
+                `).join('');
+            }
         }
 
         // --- Body Part Balance (Spider/Radar) ---
+        function drawWeeklyVolumeChart() {
+            const data = processedData.validSets || [];
+            if (!data.length) return;
+
+            // Get last 5 valid weeks from allWeeksSorted
+            const validWeeks = processedData.allWeeksSorted.filter(week => {
+                const [year] = week.split('-W');
+                return !isNaN(parseInt(year));
+            });
+            const lastFiveWeeks = validWeeks.slice(-5);
+
+            // Group sets by week and exercise, calculate volume
+            const weeklyExerciseVolumes = {};
+            const activeExercises = new Set(); // Track exercises actually performed
+            let maxTotalVolume = 0;
+
+            data.forEach(set => {
+                // Skip if year is invalid
+                if (isNaN(set.year)) return;
+                
+                const weekKey = `${set.year}-W${padWeek(set.week_number)}`;
+                // Only process sets from the last 5 weeks
+                if (lastFiveWeeks.includes(weekKey)) {
+                    if (!weeklyExerciseVolumes[weekKey]) {
+                        weeklyExerciseVolumes[weekKey] = {
+                            exercises: {},
+                            total: 0
+                        };
+                    }
+                    if (!weeklyExerciseVolumes[weekKey].exercises[set.exercise]) {
+                        weeklyExerciseVolumes[weekKey].exercises[set.exercise] = 0;
+                    }
+                    weeklyExerciseVolumes[weekKey].exercises[set.exercise] += set.volume;
+                    weeklyExerciseVolumes[weekKey].total += set.volume;
+                    maxTotalVolume = Math.max(maxTotalVolume, weeklyExerciseVolumes[weekKey].total);
+                    activeExercises.add(set.exercise); // Track this exercise as active
+                }
+            });
+
+            // Create traces only for active exercises
+            const traces = [...activeExercises].sort().map(exercise => {
+                const volumes = lastFiveWeeks.map(week => 
+                    (weeklyExerciseVolumes[week]?.exercises[exercise]) || 0
+                );
+
+                return {
+                    x: lastFiveWeeks,
+                    y: volumes,
+                    type: 'bar',
+                    name: exercise,
+                    hoverinfo: 'name+text',
+                    hovertemplate: '<b>%{fullData.name}</b><br>' +
+                                 'Volume: %{y:,.0f} kg<br>' +
+                                 '<extra>Week %{x}</extra>',
+                    width: 0.7 // Make bars narrower to fit in the week
+                };
+            });
+
+            // Add total volume annotations
+            const annotations = lastFiveWeeks.map(week => {
+                const totalVolume = weeklyExerciseVolumes[week]?.total || 0;
+                return {
+                    x: week,
+                    y: totalVolume,
+                    text: `${totalVolume.toLocaleString('en-US', { maximumFractionDigits: 0 })} kg`,
+                    showarrow: false,
+                    yanchor: 'bottom',
+                    yshift: 10,
+                    font: {
+                        color: '#ffffff99',
+                        size: 12
+                    }
+                };
+            });
+
+            const layout = getPlotlyLayout({
+                barmode: 'stack',
+                showlegend: true,
+                xaxis: {
+                    title: 'Week',
+                    type: 'category',
+                    categoryorder: 'array',
+                    categoryarray: lastFiveWeeks,
+                    tickangle: 0
+                },
+                yaxis: { 
+                    title: 'Volume (kg)',
+                    rangemode: 'tozero',
+                    range: [0, maxTotalVolume * 1.2] // Add 20% padding for annotations
+                },
+                annotations: annotations,
+                legend: {
+                    orientation: 'h',
+                    yanchor: 'bottom',
+                    y: -0.3, // Moved down slightly to accommodate annotations
+                    xanchor: 'left',
+                    x: 0,
+                    bgcolor: 'rgba(0,0,0,0.3)',
+                    bordercolor: 'rgba(255,255,255,0.1)',
+                    borderwidth: 1,
+                    font: { color: '#ffffff99' }
+                },
+                bargap: 0.4,  // Increase gap between weeks
+                bargroupgap: 0.0, // No gap within the stack
+                barmode: 'stack'
+            });
+
+            const config = {
+                responsive: true,
+                modeBarButtonsToRemove: ['lasso2d', 'select2d'],
+                displaylogo: false
+            };
+
+            Plotly.newPlot('weekly-volume-graph', traces, layout, config);
+
+            // Add click handlers for the legend
+            const graphDiv = document.getElementById('weekly-volume-graph');
+            graphDiv.on('plotly_legendclick', function(data) {
+                return false; // Prevents the default behavior of hiding the trace
+            });
+            graphDiv.on('plotly_legenddoubleclick', function(data) {
+                return false; // Prevents the default behavior of hiding all other traces
+            });
+        }
+
         function drawBodyPartBalanceChart(timePeriod = '90') {
             const chartContainer = document.getElementById('body-part-balance-chart');
             const allSets = processedData.validSets || [];
@@ -987,6 +1242,7 @@
             // Redraw plotly charts if they are in the active tab (fixes resize issue)
             if (tabId === 'tab-2') {
                 Plotly.Plots.resize('body-part-strength-graph');
+                Plotly.Plots.resize('weekly-volume-graph');
             } else if (tabId === 'tab-3') {
                 Plotly.Plots.resize('exercise-volume-graph');
                 Plotly.Plots.resize('exercise-1rm-graph');
@@ -1000,19 +1256,8 @@
 
         // --- INITIALIZATION ---   
         function startApp() {
-
-            // Check for script errors
-            if (scriptErrors.length > 0) {
-                 console.error("Aborting app start due to script load errors.");
-                 const loadingIndicator = document.getElementById('loading-indicator');
-                 loadingIndicator.innerHTML = `<p class="text-red-400">Failed to load critical libraries: ${scriptErrors.join(', ')}. Please check your internet connection and try refreshing.</p>`;
-                 return;
-            }
-
-            // Poll for libraries
-            if (typeof Papa !== 'undefined' && typeof Plotly !== 'undefined') {
-                console.log("Libraries loaded. Ready for file upload.");
-                const loadingIndicator = document.getElementById('loading-indicator');
+            console.log("Starting app initialization");
+            const loadingIndicator = document.getElementById('loading-indicator');
 
                 // Change the loading indicator to an upload prompt (styled for dark mode)
                 loadingIndicator.innerHTML = `
@@ -1030,12 +1275,9 @@
                 `; 
                 // Add event listener to the file input
                 document.getElementById('csv-upload').addEventListener('change', handleFileUpload);
-            } else {
-                console.log("Waiting for libraries to load...");
-                setTimeout(startApp, 100); // Check again
-            }
         }
         document.addEventListener('DOMContentLoaded', startApp);
     </script>
+
 </body>
 </html>
