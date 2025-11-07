@@ -9,10 +9,24 @@
     <link href="https://fonts.googleapis.com" rel="preconnect"/>
     <link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
     <link href="https://fonts.googleapis.com/css2?family=Lexend:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
-    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined" rel="stylesheet"/>
-    
-        <script src="https://cdn.plot.ly/plotly-2.33.0.min.js" defer onerror="handleScriptError(this)"></script>
-        <script src="papaparse.min.js" defer onerror="handleScriptError(this)"></script>
+	<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined" rel="stylesheet"/>
+    
+	<!-- Early global script error catcher so head-level onerror attributes can record failures
+		 before the main inline script defines handlers. Errors are stored on window.scriptErrors. -->
+	<script>
+		window.scriptErrors = window.scriptErrors || [];
+		function handleScriptError(script) {
+			try {
+				console.error('Failed to load script (early handler):', script && script.src ? script.src : script);
+			} catch (e) {
+				// ignore
+			}
+			window.scriptErrors.push((script && script.src) || String(script));
+		}
+	</script>
+
+	<script src="https://cdn.plot.ly/plotly-2.33.0.min.js" defer onerror="handleScriptError(this)"></script>
+	<script src="papaparse.min.js" defer onerror="handleScriptError(this)"></script>
     
     <script>
         tailwind.config = {
@@ -228,12 +242,17 @@
     </div>
 
     <script>
-        // --- SCRIPT LOADING ---
-        let scriptErrors = [];
-        function handleScriptError(script) {
-            console.error(`Failed to load script: ${script.src}`);
-            scriptErrors.push(script.src);
-        }
+	// --- SCRIPT LOADING ---
+	// Use the global window.scriptErrors so early head-level handler can record failures
+	window.scriptErrors = window.scriptErrors || [];
+	function handleScriptError(script) {
+		try {
+			console.error(`Failed to load script:`, (script && script.src) ? script.src : script);
+		} catch (e) {
+			// ignore
+		}
+		window.scriptErrors.push((script && script.src) || String(script));
+	}
 
         // --- GLOBAL DATA STORE ---
         let processedData = {
