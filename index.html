@@ -1,0 +1,952 @@
+<!DOCTYPE html>
+<html class="dark" lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Workout Data Dashboard</title>
+
+    <!-- New styles from your layout -->
+    <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+    <link href="https://fonts.googleapis.com" rel="preconnect"/>
+    <link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+    <link href="https://fonts.googleapis.com/css2?family=Lexend:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined" rel="stylesheet"/>
+    
+    <!-- Plotly.js for charts (still needed) -->
+    <script src="https://cdn.plot.ly/plotly-2.33.0.min.js" defer onerror="handleScriptError(this)"></script>
+    <!-- PapaParse for CSV parsing (still needed) -->
+    <script src="https://cdn.jsdelivr.net/npm/papaparse@5.3.2/papaparse.min.js" defer onerror="handleScriptError(this)"></script>
+    
+    <script>
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#13ec5b",
+                        "background-light": "#f6f8f6",
+                        "background-dark": "#102216",
+                    },
+                    fontFamily: {
+                        "display": ["Lexend", "sans-serif"]
+                    },
+                    borderRadius: {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                    // Add the new grid columns for the heatmap
+                    gridTemplateColumns: {
+                        '26': 'repeat(26, minmax(0, 1fr))',
+                    }
+                },
+            },
+        }
+    </script>
+    <style>
+        body {
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+            min-height: max(884px, 100dvh);
+        }
+        /* Styling for active tab */
+        .tab-btn.active {
+            color: #13ec5b;
+        }
+        .tab-btn.active .material-symbols-outlined {
+            color: #13ec5b;
+        }
+        .tab-btn.active .tab-label {
+            color: #13ec5b;
+        }
+        
+        .tab-btn {
+            color: #ffffff99; /* white/60 */
+        }
+        .tab-btn .tab-label {
+            color: #ffffff99;
+        }
+
+        /* Hide inactive tab content */
+        .tab-content {
+            display: none;
+        }
+        .tab-content.active {
+            display: block;
+        }
+        /* Custom dropdown arrow */
+        select {
+            appearance: none;
+            background-image: url('data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2224%22%20height%3D%2224%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%2392c9a4%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpolyline%20points%3D%226%209%2012%2015%2018%209%22%3E%3C%2Fpolyline%3E%3C%2Fsvg%3E');
+            background-repeat: no-repeat;
+            background-position: right 0.75rem center;
+            background-size: 1.25em 1.25em;
+            padding-right: 2.5rem;
+        }
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+    </style>
+</head>
+<body class="bg-background-light dark:bg-background-dark font-display text-white">
+
+    <div class="relative flex h-auto min-h-screen w-full flex-col">
+        
+        <!-- Top App Bar (Title will be updated by JS) -->
+        <header class="flex items-center bg-background-light dark:bg-background-dark p-4 pb-2 justify-between sticky top-0 z-10">
+            <div class="flex size-12 shrink-0 items-center justify-start">
+                <!-- <span class="material-symbols-outlined text-white/90">arrow_back</span> -->
+            </div>
+            <h1 id="header-title" class="text-white text-lg font-bold leading-tight tracking-[-0.015em] flex-1 text-center">Dashboard</h1>
+            <div class="flex w-12 items-center justify-end">
+                <!-- <button class="flex max-w-[480px] cursor-pointer items-center justify-center overflow-hidden rounded-lg h-12 bg-transparent text-white/90 gap-2 text-base font-bold leading-normal tracking-[0.015em] min-w-0 p-0">
+                    <span class="material-symbols-outlined">download</span>
+                </button> -->
+            </div>
+        </header>
+        
+        <main class="flex-grow px-4 pb-24"> <!-- Add padding-bottom for bottom nav -->
+            
+            <!-- Loading / Upload Prompt -->
+            <div id="loading-indicator" class="text-center py-10">
+                <svg class="animate-spin h-8 w-8 text-primary mx-auto" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                <p class="mt-4 text-white/70">Loading required libraries...</p>
+            </div>
+
+            <!-- Dashboard Container (hidden by default) -->
+            <div id="dashboard-container" class="hidden">
+                <div id="tab-content-container">
+                    
+                    <!-- Tab 1: Workout Consistency (from Layout 1) -->
+                    <div id="tab-1" class="tab-content active">
+
+                        <!-- NEW: This Week's Goal -->
+                        <h2 class="text-white tracking-light text-[28px] font-bold leading-tight text-center pb-3 pt-4">This Week's Goal</h2>
+                        <div class="relative w-full max-w-xs mx-auto mb-6 flex justify-center items-center gap-6 py-4">
+                            <!-- The three goal dots -->
+                            <div class="flex gap-4">
+                                <div id="goal-dot-1" class="w-5 h-5 rounded-full bg-white/10 transition-all duration-500"></div>
+                                <div id="goal-dot-2" class="w-5 h-5 rounded-full bg-white/10 transition-all duration-500"></div>
+                                <div id="goal-dot-3" class="w-5 h-5 rounded-full bg-white/10 transition-all duration-500"></div>
+                            </div>
+                            
+                            <!-- Text on the side -->
+                            <div class="pl-4 text-center border-l border-white/10">
+                                <div id="goal-text" class="text-4xl font-bold text-white transition-all duration-500">0</div>
+                                <div class="text-xs text-white/60 block -mt-1">Workouts</div>
+                            </div>
+                        </div>
+                        <!-- END: This Week's Goal -->
+
+                        <!-- Stats -->
+                        <div class="flex flex-wrap gap-4 pt-2">
+                            <div class="flex min-w-0 flex-1 flex-col gap-2 rounded-xl p-4 bg-white/5 border border-white/10">
+                                <p class="text-white/70 text-base font-medium leading-normal">Current Streak</p>
+                                <p id="stat-current-streak" class="text-white tracking-light text-2xl font-bold leading-tight">--</p>
+                            </div>
+                            <div class="flex min-w-0 flex-1 flex-col gap-2 rounded-xl p-4 bg-white/5 border border-white/10">
+                                <p class="text-white/70 text-base font-medium leading-normal">Total Workouts</p>
+                                <p id="stat-total-workouts" class="text-white tracking-light text-2xl font-bold leading-tight">--</p>
+                            </div>
+                            <div class="flex min-w-0 flex-1 flex-col gap-2 rounded-xl p-4 bg-white/5 border border-white/10">
+                                <p class="text-white/70 text-base font-medium leading-normal">Longest Streak</p>
+                                <p id="stat-longest-streak" class="text-white tracking-light text-2xl font-bold leading-tight">--</p>
+                            </div>
+                        </div>
+                        
+                        <!-- Headline Text -->
+                        <h2 class="text-white tracking-light text-[28px] font-bold leading-tight text-left pb-3 pt-8">Workouts per Week</h2>
+                        
+                        <!-- NEW Calendar Heatmap -->
+                        <div id="workout-calendar-heatmap" class="w-full rounded-lg bg-white/5 border border-white/10 p-4">
+                            <!-- Content will be generated by JS -->
+                        </div>
+
+                        <!-- Bar Chart (Original) - We can keep it or remove it. Let's keep it for now. -->
+                        <h2 class="text-white tracking-light text-[28px] font-bold leading-tight text-left pb-3 pt-8">Workouts per Week (Chart)</h2>
+                        <div class="bg-white/5 rounded-xl border border-white/10 p-4 mb-8">
+                            <div id="workout-consistency-graph" class="w-full h-[350px] rounded-lg"></div>
+                        </div>
+                    </div>
+
+                    <!-- Tab 2: Strength Metrics (from Layout 2) -->
+                    <div id="tab-2" class="tab-content">
+                        <!-- Hero Card (Static) -->
+                        <div class="flex flex-col items-stretch justify-start rounded-xl bg-white/5 mt-2">
+                            <div class="flex w-full min-w-72 grow flex-col items-stretch justify-center gap-1 p-6">
+                                <p class="text-[#92c9a4] text-sm font-normal leading-normal">Lifetime Lifted</p>
+                                <p id="stat-total-volume" class="text-white text-4xl font-bold leading-tight tracking-[-0.015em] text-primary">--</p>
+                                <div class="flex items-end gap-3 justify-between pt-2">
+                                    <div class="flex flex-col gap-1">
+                                        <p class="text-[#92c9a4] text-base font-normal leading-normal">Your total volume since you started tracking.</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Personal Bests Section (Static) -->
+                        <h3 class="text-white text-xl font-bold leading-tight tracking-[-0.015em] px-4 pb-2 pt-4">Personal Bests (Example)</h3>
+                        <div class="flex overflow-y-auto [-ms-scrollbar-style:none] [scrollbar-width:none] [&amp;::-webkit-scrollbar]:hidden">
+                            <div class="flex items-stretch p-4 gap-4">
+                                <div class="flex h-full flex-1 flex-col gap-2 rounded-xl min-w-60 bg-white/5 p-4">
+                                    <div class="flex items-center gap-3">
+                                        <div class="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/20 text-primary">
+                                            <span class="material-symbols-outlined">fitness_center</span>
+                                        </div>
+                                        <p class="text-white text-base font-medium leading-normal">Squat</p>
+                                    </div>
+                                    <div>
+                                        <p class="text-white text-2xl font-bold">315 lbs</p>
+                                        <p class="text-[#92c9a4] text-sm font-normal leading-normal">Oct 12, 2023</p>
+                                    </div>
+                                </div>
+                                <div class="flex h-full flex-1 flex-col gap-2 rounded-xl min-w-60 bg-white/5 p-4">
+                                    <div class="flex items-center gap-3">
+                                        <div class="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/20 text-primary">
+                                            <span class="material-symbols-outlined">horizontal_rule</span>
+                                        </div>
+                                        <p class="text-white text-base font-medium leading-normal">Bench Press</p>
+                                    </div>
+                                    <div>
+                                        <p class="text-white text-2xl font-bold">225 lbs</p>
+                                        <p class="text-[#92c9a4] text-sm font-normal leading-normal">Oct 08, 2023</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Volume by Body Part Chart -->
+                        <h3 class="text-white text-xl font-bold leading-tight tracking-[-0.015em] pb-2 pt-4">Volume by Body Part</h3>
+                        <div class="rounded-xl bg-white/5 p-4 border border-white/10">
+                            <div id="body-part-strength-graph" class="w-full h-[450px] rounded-lg"></div>
+                        </div>
+                    </div>
+
+                    <!-- Tab 3: Strength by Exercise (from Layout 3) -->
+                    <div id="tab-3" class="tab-content">
+                        <!-- Dropdown -->
+                        <div class="max-w-md mx-auto my-6">
+                            <label for="exercise-dropdown" class="block text-sm font-medium text-[#92c9a4] mb-1">Select an Exercise</label>
+                            <select id="exercise-dropdown" class="block w-full bg-white/5 border border-white/20 text-white rounded-lg p-3 text-base focus:border-primary focus:ring-primary">
+                                <option>Loading exercises...</option>
+                            </select>
+                        </div>
+
+                        <!-- Charts Section -->
+                        <section class="flex flex-col gap-4 rounded-xl bg-[#193322]/50 p-4">
+                            <!-- Volume Chart -->
+                            <h2 class="text-white text-base font-medium leading-normal">Total Volume (lbs)</h2>
+                            <div class="flex min-h-[200px] flex-1 flex-col">
+                                <div id="exercise-volume-graph" class="w-full h-full rounded-lg"></div>
+                            </div>
+                            <!-- 1RM Chart -->
+                            <h2 class="text-white text-base font-medium leading-normal mt-6">Estimated 1RM (lbs)</h2>
+                            <div class="flex min-h-[200px] flex-1 flex-col">
+                                <div id="exercise-1rm-graph" class="w-full h-full rounded-lg"></div>
+                            </div>
+                        </section>
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <!-- Bottom Navigation Bar -->
+        <nav id="bottom-nav" class="sticky bottom-0 bg-background-dark/80 backdrop-blur-sm border-t border-white/10 hidden">
+            <div class="mx-auto flex max-w-md justify-around p-2">
+                <a href="#" class="tab-btn flex flex-col items-center gap-1 p-2 rounded-lg w-20 active bg-primary/20" data-tab="tab-1" data-title="Consistency">
+                    <span class="material-symbols-outlined">calendar_month</span>
+                    <span class="tab-label text-xs text-primary">Consistency</span>
+                </a>
+                <a href="#" class="tab-btn flex flex-col items-center gap-1 p-2 rounded-lg w-20" data-tab="tab-2" data-title="Strength Metrics">
+                    <span class="material-symbols-outlined">monitoring</span>
+                    <span class="tab-label text-xs">Metrics</span>
+                </a>
+                <a href="#" class="tab-btn flex flex-col items-center gap-1 p-2 rounded-lg w-20" data-tab="tab-3" data-title="Exercise Details">
+                    <span class="material-symbols-outlined">fitness_center</span>
+                    <span class="tab-label text-xs">Exercises</span>
+                </a>
+            </div>
+        </nav>
+    </div>
+
+    <script>
+        // --- SCRIPT LOADING ---
+        let scriptErrors = [];
+        function handleScriptError(script) {
+            console.error(`Failed to load script: ${script.src}`);
+            scriptErrors.push(script.src);
+        }
+
+        // --- GLOBAL DATA STORE ---
+        let processedData = {
+            workoutsPerWeek: [],
+            strengthByBodyPart: [],
+            strengthByExercise: [],
+            exerciseOptions: [],
+            allWeeksSorted: [], // To store the master week list
+            currentWeekWorkouts: 0, // <-- NEW: For the triangle
+            streaks: {
+                current: 0,
+                longest: 0
+            }
+        };
+        
+        // --- PLOTLY LAYOUT (UPDATED FOR DARK MODE) ---
+        const darkPlotlyLayout = {
+            plot_bgcolor: "rgba(0,0,0,0)",
+            paper_bgcolor: "rgba(0,0,0,0)",
+            font: { color: "#ffffff99" }, // white/60
+            xaxis: { 
+                gridcolor: "rgba(255, 255, 255, 0.1)", // white/10
+                linecolor: "rgba(255, 255, 255, 0.1)",
+                zerolinecolor: "rgba(255, 255, 255, 0.2)"
+            },
+            yaxis: { 
+                gridcolor: "rgba(255, 255, 255, 0.1)",
+                linecolor: "rgba(255, 255, 255, 0.1)",
+                zerolinecolor: "rgba(255, 255, 255, 0.2)"
+            },
+            legend: {
+                font: { color: "#ffffff99" }
+            },
+            hovermode: 'x unified',
+            dragmode: 'pan', // Allow panning
+            margin: { l: 50, r: 20, t: 60, b: 50 } // Adjust margins
+        };
+
+        function getPlotlyLayout(customConfig = {}) {
+            // Deep merge customConfig into darkPlotlyLayout
+            let layout = JSON.parse(JSON.stringify(darkPlotlyLayout)); // Deep copy
+            
+            if (customConfig.title) layout.title = { text: customConfig.title, font: { color: '#ffffff', size: 18 } };
+            if (customConfig.xaxis) Object.assign(layout.xaxis, customConfig.xaxis);
+            if (customConfig.yaxis) Object.assign(layout.yaxis, customConfig.yaxis);
+            if (customConfig.legend) Object.assign(layout.legend, customConfig.legend);
+            if (customConfig.dragmode) layout.dragmode = customConfig.dragmode;
+
+            return layout;
+        }
+
+        // --- UTILITY FUNCTIONS ---
+        function parseDate(dateStr) {
+            if (!dateStr) return null;
+            const parts = dateStr.split('.');
+            if (parts.length === 3) {
+                // Format is DD.MM.YY
+                return new Date(`20${parts[2]}-${parts[1]}-${parts[0]}`);
+            }
+            return null;
+        }
+
+        // Function to get the week number
+        function getWeekNumber(d) {
+            d = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+            d.setUTCDate(d.getUTCDate() + 4 - (d.getUTCDay() || 7)); // Thursday
+            var yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+            var weekNo = Math.ceil((((d - yearStart) / 86400000) + 1) / 7);
+            return weekNo;
+        }
+
+        /**
+         * Pads a week number with a leading zero if it's less than 10.
+         * e.g., 9 -> "09", 10 -> "10"
+         */
+        function padWeek(weekNum) {
+            return String(weekNum).padStart(2, '0');
+        }
+
+        function parseWeight(weightStr) {
+            if (weightStr) { return parseFloat(weightStr.replace(',', '.').replace('kg', '').trim()) || 0; }
+            return 0;
+        }
+
+        function estimate1RM(weight, reps) {
+            // Using Epley formula
+            if (weight > 0 && reps > 0) { return weight * (1 + reps / 30); }
+            return 0;
+        }
+        
+        function groupBy(array, keys) {
+            return array.reduce((result, currentValue) => {
+                const key = keys.map(k => currentValue[k]).join('-');
+                (result[key] = result[key] || []).push(currentValue);
+                return result;
+            }, {});
+        }
+
+        // --- STREAK CALCULATION LOGIC ---
+        /**
+         * Calculates current and longest streaks based on workout weeks.
+         * A "fulfilled" week has 3 or more workouts.
+         */
+        function calculateStreaks() {
+            const FULFILLED_GOAL = 3;
+            const weeksData = processedData.workoutsPerWeek;
+            if (weeksData.length === 0) return;
+
+            // Create a map for quick lookup
+            const weekMap = new Map();
+            weeksData.forEach(w => weekMap.set(`${w.year}-${w.week_number}`, w.workout_count));
+
+            const sortedWeeks = weeksData.sort((a, b) => a.year - b.year || a.week_number - b.week_number);
+            const minYear = sortedWeeks[0].year;
+            const maxYear = sortedWeeks[sortedWeeks.length - 1].year;
+            
+            let longestStreak = 0;
+            let currentTempStreak = 0;
+
+            // Iterate through all weeks from min to max to find longest streak
+            for (let y = minYear; y <= maxYear; y++) {
+                // Use 53 weeks to be safe, although 52 is standard
+                for (let w = 1; w <= 53; w++) {
+                    const count = weekMap.get(`${y}-${w}`) || 0;
+                    if (count >= FULFILLED_GOAL) {
+                        currentTempStreak++;
+                    } else {
+                        longestStreak = Math.max(longestStreak, currentTempStreak);
+                        currentTempStreak = 0;
+                    }
+                }
+            }
+            // Final check after loop
+            longestStreak = Math.max(longestStreak, currentTempStreak);
+
+            // Calculate current streak by iterating backwards from *last week*
+            let currentStreak = 0;
+            const today = new Date();
+            // Get today's week number
+            let currentYear = today.getFullYear();
+            let currentWeek = getWeekNumber(today);
+
+            // Set starting point to *last week*
+            currentWeek--;
+            if (currentWeek < 1) {
+                currentWeek = 52; // Assuming 52 weeks in a year for this loop
+                currentYear--;
+            }
+
+            // Iterate backwards for up to 5 years (260 weeks) or until minYear
+            for (let i = 0; i < 260; i++) {
+                const count = weekMap.get(`${currentYear}-${currentWeek}`) || 0;
+                
+                if (count >= FULFILLED_GOAL) {
+                    currentStreak++;
+                } else {
+                    // Streak is broken
+                    break;
+                }
+
+                // Move to the previous week
+                currentWeek--;
+                if (currentWeek < 1) {
+                    currentWeek = 52; 
+                    currentYear--;
+                }
+                
+                // Stop if we go before our data
+                if (currentYear < minYear) {
+                    break;
+                }
+            }
+
+            processedData.streaks = {
+                current: currentStreak,
+                longest: longestStreak
+            };
+            
+            console.log("Streaks calculated:", processedData.streaks);
+        }
+
+
+        // --- DATA PROCESSING ---
+
+        function processCsvFile(file) {
+            return new Promise((resolve, reject) => {
+                Papa.parse(file, {
+                    header: true,
+                    skipEmptyLines: true,
+                    complete: (results) => {
+                        try {
+                            const rawData = results.data;
+                            console.log(`Parsed ${rawData.length} rows from CSV.`);
+
+                            // 1. Process all rows
+                            const processedRows = rawData.map(row => {
+                                const date = parseDate(row['Datum']);
+                                const isSet = row['Satz / Aufwärmsatz / Abkühlungssatz'] === 'Satz';
+                                const reps = parseInt(row['Wiederholungen / Zeit'], 10);
+                                const weight = parseWeight(row['Gewicht / Strecke']);
+                                const isSkipped = row['Ausgelassen'] === 'Ja';
+
+                                if (!date || isSkipped || !row['Übung']) {
+                                    return null;
+                                }
+
+                                const volume = (isSet && reps && weight) ? reps * weight : 0;
+                                const e1RM = (isSet && reps && weight) ? estimate1RM(weight, reps) : 0;
+                                
+                                return { 
+                                    date: date, year: date.getFullYear(), week_number: getWeekNumber(date),
+                                    exercise: row['Übung'], bodyPart: row['Bereich'],
+                                    isSet: isSet, isSkipped: false, reps: reps, weight: weight,
+                                    volume: volume, e1RM: e1RM
+                                };
+                            }).filter(row => row !== null && row.year >= 2022);
+                            
+                            console.log(`Processed ${processedRows.length} valid rows.`);
+
+                            // 2. Calculate `workoutsPerWeek`
+                            const workoutDates = [...new Set(processedRows.map(r => r.date.toDateString()))];
+                            const workoutsByWeek = {};
+                            workoutDates.forEach(dateStr => {
+                                const date = new Date(dateStr);
+                                const year = date.getFullYear();
+                                const week = getWeekNumber(date);
+                                const key = `${year}-${week}`;
+                                workoutsByWeek[key] = (workoutsByWeek[key] || 0) + 1;
+                            });
+
+                            // NEW: Get current week workout count for the triangle
+                            const today = new Date();
+                            const currentYear = today.getFullYear();
+                            const currentWeek = getWeekNumber(today);
+                            const currentWeekKey = `${currentYear}-${currentWeek}`;
+                            processedData.currentWeekWorkouts = workoutsByWeek[currentWeekKey] || 0;
+                            console.log(`Current week workouts (${currentWeekKey}): ${processedData.currentWeekWorkouts}`);
+
+                            processedData.workoutsPerWeek = Object.entries(workoutsByWeek).map(([key, count]) => {
+                                const [year, week] = key.split('-').map(Number);
+                                return {
+                                    year: year,
+                                    week_number: week,
+                                    workout_count: count
+                                };
+                            }).sort((a, b) => a.year - b.year || a.week_number - b.week_number);
+
+                            // 3. Calculate `strengthByBodyPart`
+                            const validSets = processedRows.filter(r => r.isSet && r.volume > 0);
+                            const setsByBodyPartWeek = groupBy(validSets, ['bodyPart', 'year', 'week_number']);
+                            processedData.strengthByBodyPart = Object.entries(setsByBodyPartWeek).map(([key, sets]) => {
+                                const [bodyPart, year, week] = key.split('-');
+                                const totalVolume = sets.reduce((sum, s) => sum + s.volume, 0);
+                                return {
+                                    Bereich: bodyPart,
+                                    year: parseInt(year),
+                                    week_number: parseInt(week),
+                                    Volume: totalVolume
+                                };
+                            }).filter(d => d.Bereich) // Filter out any undefined body parts
+                            .sort((a, b) => a.year - b.year || a.week_number - b.week_number); // <-- FIX: Added sort
+
+                            // 4. Calculate `strengthByExercise`
+                            const setsByExerciseWeek = groupBy(validSets, ['exercise', 'year', 'week_number']);
+                            processedData.strengthByExercise = Object.entries(setsByExerciseWeek).map(([key, sets]) => {
+                                const [exercise, year, week] = key.split('-');
+                                const totalVolume = sets.reduce((sum, s) => sum + s.volume, 0);
+                                const max1RM = sets.reduce((max, s) => Math.max(max, s.e1RM), 0);
+                                return {
+                                    Übung: exercise,
+                                    year: parseInt(year),
+                                    week_number: parseInt(week),
+                                    Total_Volume: totalVolume,
+                                    Average_Estimated_1RM: max1RM // Use max 1RM for the week
+                                };
+                            }).filter(d => d.Übung)
+                            .sort((a, b) => a.year - b.year || a.week_number - b.week_number); // <-- FIX: Added sort
+
+                            // 5. Get unique exercise options for dropdown
+                            processedData.exerciseOptions = [...new Set(processedData.strengthByExercise.map(r => r.Übung))].sort();
+
+                            // 6. NEW: Calculate streaks
+                            calculateStreaks();
+
+                            console.log("Data processing finished.");
+                            
+                            resolve();
+                        } catch (error) {
+                            console.error("Error processing data:", error);
+                            reject(error);
+                        }
+                    },
+                    error: (error) => {
+                        console.error("PapaParse error:", error);
+                        reject(error);
+                    }
+                });
+            });
+        }
+
+        function handleFileUpload(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            console.log("File selected:", file.name);
+            const loadingIndicator = document.getElementById('loading-indicator');
+            loadingIndicator.innerHTML = `
+                <svg class="animate-spin h-8 w-8 text-primary mx-auto" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                <p class="mt-4 text-white/70">Processing workout data...</p>`;
+
+            processCsvFile(file)
+                .then(() => {
+                    console.log("Data ready, building UI.");
+                    onDataReady();
+                })
+                .catch(error => {
+                    loadingIndicator.innerHTML = `<p class="text-red-400">Error processing file: ${error.message}</p>`;
+                });
+        }
+
+        // --- UI DRAWING FUNCTIONS ---
+
+        function onDataReady() {
+            // Hide loading indicator
+            document.getElementById('loading-indicator').style.display = 'none';
+            // Show dashboard
+            document.getElementById('dashboard-container').classList.remove('hidden');
+            document.getElementById('bottom-nav').classList.remove('hidden');
+            document.getElementById('bottom-nav').classList.add('flex'); // Make it visible
+            
+            // --- Populate Stats Cards ---
+            const totalWorkouts = processedData.workoutsPerWeek.reduce((sum, d) => sum + d.workout_count, 0);
+            document.getElementById('stat-total-workouts').textContent = totalWorkouts;
+            
+            const totalVolume = processedData.strengthByBodyPart.reduce((sum, d) => sum + d.Volume, 0);
+            document.getElementById('stat-total-volume').textContent = `${totalVolume.toLocaleString('en-US', { maximumFractionDigits: 0 })} lbs`;
+
+            // NEW: Populate streak cards
+            document.getElementById('stat-current-streak').textContent = processedData.streaks.current;
+            document.getElementById('stat-longest-streak').textContent = processedData.streaks.longest;
+
+            // --- NEW: Create a master list of all weeks in chronological order ---
+            const allWeeksSet = new Set();
+            processedData.workoutsPerWeek.forEach(d => allWeeksSet.add(`${d.year}-${d.week_number}`));
+            processedData.strengthByBodyPart.forEach(d => allWeeksSet.add(`${d.year}-${d.week_number}`));
+            processedData.strengthByExercise.forEach(d => allWeeksSet.add(`${d.year}-${d.week_number}`));
+
+            processedData.allWeeksSorted = [...allWeeksSet]
+                .map(key => {
+                    const [year, week] = key.split('-').map(Number);
+                    return { year, week };
+                })
+                .sort((a, b) => a.year - b.year || a.week - b.week)
+                .map(d => `${d.year}-W${padWeek(d.week)}`);
+            // --- End of new master list ---
+
+            // Draw initial charts
+            drawThisWeekGoal(); // <-- UPDATED
+            drawWorkoutCalendarHeatmap();
+            drawWorkoutConsistencyChart();
+            drawBodyPartChart();
+            
+            // Populate dropdown
+            const dropdown = document.getElementById('exercise-dropdown');
+            dropdown.innerHTML = processedData.exerciseOptions
+                .map(ex => `<option value="${ex}">${ex}</option>`)
+                .join('');
+            dropdown.addEventListener('change', () => drawExerciseCharts(dropdown.value));
+            
+            // Draw initial exercise chart
+            if (processedData.exerciseOptions.length > 0) {
+                drawExerciseCharts(processedData.exerciseOptions[0]);
+            }
+            
+            // Set initial header title
+            document.getElementById('header-title').textContent = "Consistency";
+        }
+
+        // --- CHART DRAWING FUNCTIONS ---
+
+        // NEW: Function to draw the goal dots
+        function drawThisWeekGoal() {
+            const count = processedData.currentWeekWorkouts;
+            const primaryColor = "bg-primary";
+            const defaultColor = "bg-white/10";
+
+            const dot1 = document.getElementById('goal-dot-1');
+            const dot2 = document.getElementById('goal-dot-2');
+            const dot3 = document.getElementById('goal-dot-3');
+            const text = document.getElementById('goal-text');
+
+            // Update text
+            text.textContent = count;
+
+            // Update colors based on count
+            dot1.classList.toggle(primaryColor, count >= 1);
+            dot1.classList.toggle(defaultColor, count < 1);
+
+            dot2.classList.toggle(primaryColor, count >= 2);
+            dot2.classList.toggle(defaultColor, count < 2);
+
+            dot3.classList.toggle(primaryColor, count >= 3);
+            dot3.classList.toggle(defaultColor, count < 3);
+        }
+
+        function drawWorkoutCalendarHeatmap() {
+            const container = document.getElementById('workout-calendar-heatmap');
+            container.innerHTML = ''; // Clear it
+
+            const weekMap = new Map();
+            processedData.workoutsPerWeek.forEach(w => weekMap.set(`${w.year}-${w.week_number}`, w.workout_count));
+            
+            const allYears = [...new Set(processedData.workoutsPerWeek.map(w => w.year))].sort().reverse(); // Show recent year first
+
+            if (allYears.length === 0) {
+                container.innerHTML = '<p class="text-white/50">No workout data found to display calendar.</p>';
+                return;
+            }
+            
+            const today = new Date();
+            const currentYear = today.getFullYear();
+            const currentWeek = getWeekNumber(today);
+
+            allYears.forEach(year => {
+                let yearHtml = `<h3 class="text-white font-bold text-xl mb-3">${year}</h3>`;
+                // Use 26 cols to get 2 rows of 26
+                let gridHtml = '<div class="grid grid-cols-26 gap-1.5">'; 
+
+                // Use 53 weeks to be safe
+                for (let w = 1; w <= 53; w++) {
+                    // Stop drawing boxes if we are in the future
+                    if (year > currentYear || (year === currentYear && w > currentWeek)) {
+                        break;
+                    }
+
+                    const count = weekMap.get(`${year}-${w}`) || 0;
+                    const tooltip = `Year ${year}, Week ${w}: ${count} workout(s)`;
+                    // aspect-square makes it a perfect square
+                    let classes = 'aspect-square rounded border-2 flex items-center justify-center text-xs text-white/70';
+
+                    if (year === currentYear && w === currentWeek) {
+                        classes += ' border-blue-400 bg-blue-400/30'; // Highlight current week
+                    } else if (count >= 3) {
+                        classes += ' border-primary bg-primary/30'; // Green
+                    } else if (count > 0) {
+                        classes += ' border-yellow-400 bg-yellow-400/30'; // Yellow
+                    } else {
+                        classes += ' border-white/10'; // Default
+                    }
+                    
+                    gridHtml += `<div class="${classes}" title="${tooltip}"></div>`;
+                }
+                
+                gridHtml += '</div>';
+                // Add a bottom margin to separate the years
+                container.innerHTML += (yearHtml + gridHtml + '<div class="mb-6"></div>'); 
+            });
+        }
+
+        function drawWorkoutConsistencyChart() {
+            const data = processedData.workoutsPerWeek;
+            const FULFILLED_GOAL = 3;
+            
+            // NEW: Create color array based on goal
+            const colors = data.map(d => d.workout_count >= FULFILLED_GOAL ? '#13ec5b' : 'rgba(255, 255, 255, 0.2)');
+
+            const trace = {
+                x: data.map(d => `${d.year}-W${padWeek(d.week_number)}`), // Apply padding
+                y: data.map(d => d.workout_count),
+                type: 'bar',
+                marker: { 
+                    color: colors // Use the new color array
+                } 
+            };
+            
+            const layout = getPlotlyLayout({
+                title: { text: 'Weekly Workout Count' },
+                xaxis: { 
+                    title: 'Week', 
+                    type: 'category',
+                    categoryorder: 'array', // <-- FIX: Force order
+                    categoryarray: processedData.allWeeksSorted // <-- FIX: Use master list
+                },
+                yaxis: { title: 'Number of Workouts' }
+            });
+
+            Plotly.newPlot('workout-consistency-graph', [trace], layout, {responsive: true});
+        }
+
+        function drawBodyPartChart() {
+            const data = processedData.strengthByBodyPart;
+            const traces = [];
+            const bodyParts = [...new Set(data.map(d => d.Bereich))];
+
+            // Using Plotly's default color scale
+            bodyParts.forEach(part => {
+                const partData = data.filter(d => d.Bereich === part);
+                traces.push({
+                    x: partData.map(d => `${d.year}-W${padWeek(d.week_number)}`), // Apply padding
+                    y: partData.map(d => d.Volume),
+                    type: 'scatter',
+                    mode: 'lines+markers',
+                    name: part,
+                    line: { shape: 'spline' }, // Smooth the lines
+                    marker: { size: 4 }
+                });
+            });
+            
+            const layout = getPlotlyLayout({
+                title: { text: 'Volume Progression by Body Part' },
+                xaxis: { 
+                    title: 'Week', 
+                    type: 'category',
+                    categoryorder: 'array', // <-- FIX: Force order
+                    categoryarray: processedData.allWeeksSorted // <-- FIX: Use master list
+                },
+                yaxis: { title: 'Total Volume (lbs)' },
+                legend: { orientation: 'h', y: -0.2 }
+            });
+
+            Plotly.newPlot('body-part-strength-graph', traces, layout, {responsive: true});
+        }
+        
+        function drawExerciseCharts(selectedExercise) {
+            if (!selectedExercise) return;
+            
+            const data = processedData.strengthByExercise.filter(d => d.Übung === selectedExercise);
+
+            // Volume Chart
+            const volumeTrace = {
+                x: data.map(d => `${d.year}-W${padWeek(d.week_number)}`), // Apply padding
+                y: data.map(d => d.Total_Volume),
+                type: 'scatter',
+                mode: 'lines',
+                name: 'Volume',
+                fill: 'tozeroy', // Fill area under the line
+                line: { color: '#13ec5b', shape: 'spline' },
+                fillcolor: 'rgba(19, 236, 91, 0.1)'
+            };
+            const volumeLayout = getPlotlyLayout({
+                title: { text: 'Total Volume' },
+                xaxis: { 
+                    title: 'Week', 
+                    type: 'category',
+                    categoryorder: 'array', // <-- FIX: Force order
+                    categoryarray: processedData.allWeeksSorted // <-- FIX: Use master list
+                },
+                yaxis: { title: 'Volume (lbs)' }
+            });
+            Plotly.newPlot('exercise-volume-graph', [volumeTrace], volumeLayout, {responsive: true});
+
+            // 1RM Chart
+            const rmTrace = {
+                x: data.map(d => `${d.year}-W${padWeek(d.week_number)}`), // Apply padding
+                y: data.map(d => d.Average_Estimated_1RM),
+                type: 'scatter',
+                mode: 'lines',
+                name: 'Est. 1RM',
+                fill: 'tozeroy',
+                line: { color: '#ef4444', shape: 'spline' }, // Red color for 1RM
+                fillcolor: 'rgba(239, 68, 68, 0.1)'
+            };
+            const rmLayout = getPlotlyLayout({
+                title: { text: 'Estimated 1RM' },
+                xaxis: { 
+                    title: 'Week', 
+                    type: 'category',
+                    categoryorder: 'array', // <-- FIX: Force order
+                    categoryarray: processedData.allWeeksSorted // <-- FIX: Use master list
+                },
+                yaxis: { title: '1RM (lbs)' }
+            });
+            Plotly.newPlot('exercise-1rm-graph', [rmTrace], rmLayout, {responsive: true});
+        }
+
+        // --- NEW TAB SWITCHING LOGIC ---
+        document.getElementById('bottom-nav').addEventListener('click', (e) => {
+            const tabButton = e.target.closest('.tab-btn');
+            if (!tabButton) return;
+            
+            e.preventDefault();
+            
+            const tabId = tabButton.dataset.tab;
+            const tabTitle = tabButton.dataset.title;
+
+            // Update Header Title
+            document.getElementById('header-title').textContent = tabTitle;
+
+            // Update Tab Content
+            document.querySelectorAll('.tab-content').forEach(content => {
+                content.classList.toggle('active', content.id === tabId);
+            });
+
+            // Update Tab Buttons
+            document.querySelectorAll('.tab-btn').forEach(btn => {
+                const isActive = btn.dataset.tab === tabId;
+                btn.classList.toggle('active', isActive);
+                btn.classList.toggle('bg-primary/20', isActive); // Active background
+                
+                const icon = btn.querySelector('.material-symbols-outlined');
+                const label = btn.querySelector('.tab-label');
+
+                icon.classList.toggle('text-primary', isActive);
+                icon.classList.toggle('text-white/60', !isActive);
+                
+                label.classList.toggle('text-primary', isActive);
+                label.classList.toggle('text-white/60', !isActive);
+            });
+
+            // Redraw plotly charts if they are in the active tab (fixes resize issue)
+            if (tabId === 'tab-2') {
+                Plotly.Plots.resize('body-part-strength-graph');
+            } else if (tabId === 'tab-3') {
+                Plotly.Plots.resize('exercise-volume-graph');
+                Plotly.Plots.resize('exercise-1rm-graph');
+            } else if (tabId === 'tab-1') {
+                Plotly.Plots.resize('workout-consistency-graph');
+            }
+
+            // Scroll to top
+            window.scrollTo(0, 0);
+        });
+        
+        // --- INITIALIZATION ---
+        
+        function startApp() {
+            // Check for script errors
+            if (scriptErrors.length > 0) {
+                 console.error("Aborting app start due to script load errors.");
+                 const loadingIndicator = document.getElementById('loading-indicator');
+                 loadingIndicator.innerHTML = `<p class="text-red-400">Failed to load critical libraries: ${scriptErrors.join(', ')}. Please check your internet connection and try refreshing.</p>`;
+                 return;
+            }
+
+            // Poll for libraries
+            if (typeof Papa !== 'undefined' && typeof Plotly !== 'undefined') {
+                console.log("Libraries loaded. Ready for file upload.");
+                const loadingIndicator = document.getElementById('loading-indicator');
+                // Change the loading indicator to an upload prompt (styled for dark mode)
+                loadingIndicator.innerHTML = `
+                    <div class="text-center">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="mx-auto h-12 w-12 text-white/40" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                        </svg>
+                        <h3 class="mt-4 text-xl font-semibold text-white">Upload Your Workout CSV</h3>
+                        <p class="mt-2 text-white/60 mb-6">Please upload your 'GymBook-Logs...' file to begin.</p>
+                        <label for="csv-upload" class="cursor-pointer bg-primary hover:bg-primary/80 text-background-dark font-bold py-3 px-6 rounded-lg shadow-md transition-all duration-300">
+                            Select CSV File
+                        </label>
+                        <input type="file" id="csv-upload" accept=".csv, text/csv" class="hidden">
+                    </div>
+                `;
+                
+                // Add event listener to the file input
+                document.getElementById('csv-upload').addEventListener('change', handleFileUpload);
+                
+            } else {
+                console.log("Waiting for libraries to load...");
+                setTimeout(startApp, 100); // Check again
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', startApp);
+
+    </script>
+</body>
+</html>
