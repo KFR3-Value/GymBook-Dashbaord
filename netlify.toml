@@ -1,21 +1,15 @@
-This file tells Netlify how to deploy your site.
-
-Add this file to the root of your GitHub repository.
-
 [build]
-
-No build command is needed for a simple HTML file.
-
-command = ""
-
-The "publish" directory is the folder that contains your index.html.
-
-Since your index.html is in the root, we set this to "."
-
-publish = "."
+  publish = "."
+  command = ""
 
 [build.environment]
+  NODE_VERSION = "18"
 
-This tells Netlify you're using a simple setup.
-
-NODE_VERSION = "18"
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Frame-Options = "DENY"
+    X-XSS-Protection = "1; mode=block"
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "strict-origin-when-cross-origin"
+    Content-Security-Policy = "default-src 'self' 'unsafe-inline' cdn.tailwindcss.com fonts.googleapis.com fonts.gstatic.com cdn.plot.ly cdnjs.cloudflare.com; img-src 'self' data:; connect-src 'self'"
