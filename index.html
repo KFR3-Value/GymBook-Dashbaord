@@ -953,103 +953,56 @@
         }
 
         // --- NEW TAB SWITCHING LOGIC ---
-
-        // --- NEW TAB SWITCHING LOGIC ---
-
         document.getElementById('bottom-nav').addEventListener('click', (e) => {
-
             const tabButton = e.target.closest('.tab-btn');
-
             if (!tabButton) return;
-
            
-
             e.preventDefault();
-
            
-
             const tabId = tabButton.dataset.tab;
-
             const tabTitle = tabButton.dataset.title;
 
-
-
             // Update Header Title
-
             document.getElementById('header-title').textContent = tabTitle;
 
-
-
             // Update Tab Content
-
             document.querySelectorAll('.tab-content').forEach(content => {
-
                 content.classList.toggle('active', content.id === tabId);
-
             });
 
-
-
             // Update Tab Buttons
-
             document.querySelectorAll('.tab-btn').forEach(btn => {
-
                 const isActive = btn.dataset.tab === tabId;
 
                 btn.classList.toggle('active', isActive);
+                btn.classList.toggle('bg-primary/20', isActive);
 
-                btn.classList.toggle('bg-primary/20', isActive); // Active background
-
-               
-
+                // Active background              
                 const icon = btn.querySelector('.material-symbols-outlined');
-
                 const label = btn.querySelector('.tab-label');
 
-
-
                 icon.classList.toggle('text-primary', isActive);
-
-                icon.classList.toggle('text-white/60', !isActive);
-
-               
-
+                icon.classList.toggle('text-white/60', !isActive);             
                 label.classList.toggle('text-primary', isActive);
-
                 label.classList.toggle('text-white/60', !isActive);
 
             });
 
-
-
             // Redraw plotly charts if they are in the active tab (fixes resize issue)
-
             if (tabId === 'tab-2') {
-
                 Plotly.Plots.resize('body-part-strength-graph');
-
             } else if (tabId === 'tab-3') {
-
                 Plotly.Plots.resize('exercise-volume-graph');
-
                 Plotly.Plots.resize('exercise-1rm-graph');
-
             } else if (tabId === 'tab-1') {
-
                 Plotly.Plots.resize('workout-consistency-graph');
-
             }
 
-
-
             // Scroll to top
-
             window.scrollTo(0, 0);
-
         });   
 
-        // --- INITIALIZATION ---
-    
+        // --- INITIALIZATION ---   
         function startApp() {
 
             // Check for script errors
@@ -1061,41 +1014,24 @@
             }
 
             // Poll for libraries
-
             if (typeof Papa !== 'undefined' && typeof Plotly !== 'undefined') {
-
                 console.log("Libraries loaded. Ready for file upload.");
-
                 const loadingIndicator = document.getElementById('loading-indicator');
 
                 // Change the loading indicator to an upload prompt (styled for dark mode)
-
                 loadingIndicator.innerHTML = `
-
                     <div class="text-center">
-
                         <svg xmlns="http://www.w3.org/2000/svg" class="mx-auto h-12 w-12 text-white/40" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1">
-
                             <path stroke-linecap="round" stroke-linejoin="round" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-
                         </svg>
-
                         <h3 class="mt-4 text-xl font-semibold text-white">Upload Your Workout CSV</h3>
-
                         <p class="mt-2 text-white/60 mb-6">Please upload your 'GymBook-Logs...' file to begin.</p>
-
                         <label for="csv-upload" class="cursor-pointer bg-primary hover:bg-primary/80 text-background-dark font-bold py-3 px-6 rounded-lg shadow-md transition-all duration-300">
-
                             Select CSV File
-
                         </label>
-
                         <input type="file" id="csv-upload" accept=".csv, text/csv" class="hidden">
-
                     </div>
-
                 `; 
-
                 // Add event listener to the file input
                 document.getElementById('csv-upload').addEventListener('change', handleFileUpload);
             } else {
