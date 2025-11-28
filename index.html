@@ -205,6 +205,7 @@
                             <select id="balance-time-filter" class="block w-full bg-white/5 border border-white/20 text-white rounded-lg p-3 text-base focus:border-primary focus:ring-primary">
                                 <option value="90">Last 90 Days</option>
                                 <option value="30">Last 30 Days</option>
+                                <option value="7">Last 7 Days</option>
                                 <option value="all">All Time</option>
                             </select>
                         </div>
@@ -334,6 +335,35 @@
                 current: 0,
                 longest: 0
             }
+        };
+
+        // --- NEW: Muscle Group Mapping ---
+        const muscleGroupMap = {
+            // Beine & Po
+            'Gesässmuskeln': 'Gluteus',
+            'Oberschenkelbeuger': 'Oberschenkel',
+            'Quadrizeps': 'Oberschenkel',
+            'Wadenmuskeln': 'Waden',
+            'Adduktoren': 'Oberschenkel',
+            
+            // Rücken
+            'Rückenmuskeln': 'Rücken',
+            'Lendenmuskeln': 'Rücken',
+
+            // Bauchmuskeln
+            'Gerade Bauchmuskeln': 'Bauchmuskeln',
+            'Schräge Bauchmuskeln': 'Bauchmuskeln',
+
+            // Arme
+            'Armbeuger': 'Arme',
+            'Armstrecker': 'Arme',
+
+            // Brust
+            'Brustmuskeln': 'Brust',
+            
+            // Schultern
+            'Schultermuskeln': 'Schultern',
+            'Kapuzenmuskel': 'Schultern'
         };
 
         // --- PLOTLY LAYOUT (UPDATED FOR DARK MODE) ---
@@ -557,7 +587,9 @@
                                     date: date, year: date.getFullYear(), week_number: getWeekNumber(date),
                                     exercise: row['Übung'], bodyPart: row['Bereich'],
                                     isSet: isSet, isSkipped: false, reps: reps, weight: weight,
-                                    volume: volume, e1RM: e1RM
+                                    volume: volume, e1RM: e1RM,
+                                    primaryMuscles: row['Muskelgruppen (Primäre)'],
+                                    secondaryMuscles: row['Muskelgruppen (Sekundäre)']
                                 };
                             }).filter(row => row !== null && row.year >= 2022);
                            
@@ -1123,7 +1155,7 @@
         function drawBodyPartBalanceChart(timePeriod = '90') {
             const chartContainer = document.getElementById('body-part-balance-chart');
             const allSets = processedData.validSets || [];
-            if (!chartContainer) return; // no container
+            if (!chartContainer) return; 
             if (allSets.length === 0) {
                 chartContainer.innerHTML = '<p class="text-white/50 p-4 text-center">No data found for this time period.</p>';
                 return;
@@ -1143,17 +1175,36 @@
                 return;
             }
 
-            // Group by bodyPart and count sets
-            const setsByBodyPart = groupBy(filteredSets, ['bodyPart']);
-            const labels = [];
-            const values = [];
+            // --- Calculate weighted reps by main GROUP ---
+            const weightedRepsByGroup = {}; 
+            
+            filteredSets.forEach(set => {
+                const reps = set.reps; 
+                if (!reps || isNaN(reps)) return; 
 
-            Object.entries(setsByBodyPart).forEach(([bodyPart, arr]) => {
-                if (bodyPart && bodyPart.trim() !== '' && bodyPart !== 'undefined') {
-                    labels.push(bodyPart);
-                    values.push(arr.length);
+                // 1. Process Primary Muscles (weight: 1.0)
+                if (set.primaryMuscles) {
+                    const primary = set.primaryMuscles.split(',').map(m => m.trim()).filter(Boolean);
+                    primary.forEach(muscleName => {
+                        const group = muscleGroupMap[muscleName] || 'Andere'; // Find the group
+                        weightedRepsByGroup[group] = (weightedRepsByGroup[group] || 0) + (reps * 1.0); // Add to group
+                    });
+                }
+
+                // 2. Process Secondary Muscles (weight: 0.5)
+                if (set.secondaryMuscles) {
+                    const secondary = set.secondaryMuscles.split(',').map(m => m.trim()).filter(Boolean);
+                    secondary.forEach(muscleName => {
+                        const group = muscleGroupMap[muscleName] || 'Andere'; // Find the group
+                        weightedRepsByGroup[group] = (weightedRepsByGroup[group] || 0) + (reps * 0.5); // Add to group
+                    });
                 }
             });
+
+            // Extract the sorted labels (groups) and values
+            const labels = Object.keys(weightedRepsByGroup).sort();
+            const values = labels.map(group => weightedRepsByGroup[group]);
+            // --- END NEW ---
 
             if (labels.length === 0) {
                 chartContainer.innerHTML = '<p class="text-white/50 p-4 text-center">No data found for this time period.</p>';
@@ -1167,23 +1218,25 @@
             const trace = {
                 type: 'scatterpolar',
                 r: values,
-                theta: labels,
+                theta: labels, // Use the new group labels
                 fill: 'toself',
                 fillcolor: 'rgba(19, 236, 91, 0.25)',
                 line: { color: '#13ec5b' },
-                name: 'Sets'
+                name: 'Weighted Reps'
             };
 
             const layout = getPlotlyLayout({
-                title: { text: `Total Sets per Body Part (${timePeriod === 'all' ? 'All Time' : 'Last ' + timePeriod + ' Days'})` },
-                dragmode: false
+                title: { text: `Weighted Reps per Muscle Group (${timePeriod === 'all' ? 'All Time' : 'Last ' + timePeriod + ' Days'})` },
+                dragmode: 'rotate' // Ensure rotation is enabled
             });
-
+            
+            const maxVal = Math.max(...values.slice(0, -1)); // Get max before repeating
+            
             layout.polar = {
-                bgcolor: 'rgba(255,255,255,0.03)',
+                bgcolor: 'rgba(255, 255, 255, 0.03)', // <-- FIXED TYPO (was 25F5)
                 radialaxis: {
                     visible: true,
-                    range: [0, Math.max(...values.slice(0, -1))],
+                    range: [0, Math.max(maxVal, 10)], // <-- Set a minimum range of 10
                     gridcolor: 'rgba(255,255,255,0.1)',
                     linecolor: 'rgba(255,255,255,0.1)'
                 },

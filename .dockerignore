@@ -1,0 +1,6 @@
+.git
+.vscode
+.gitignore
+netlify.toml
+README.md
+Dockerfile
